@@ -24,6 +24,9 @@ unmanagedJars in Compile <+= javaHome map { jh /*: Option[File]*/ =>
     throw new RuntimeException( "JavaFX not detected (needs Java runtime 7u06 or later): "+ jfxJar.getPath )  // '.getPath' = full filename
   }
   Attributed.blank(jfxJar)
-} 
+}
 
-libraryDependencies += "com.google.zxing" % "core" % "3.1.0"
+libraryDependencies ++= Seq(
+  "com.google.zxing" % "core" % "3.1.0",
+  "com.google.zxing" % "javase" % "3.1.0"
+)
