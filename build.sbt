@@ -28,5 +28,7 @@ unmanagedJars in Compile <+= javaHome map { jh /*: Option[File]*/ =>
 
 libraryDependencies ++= Seq(
   "com.google.zxing" % "core" % "3.1.0",
-  "com.google.zxing" % "javase" % "3.1.0"
+  "com.google.zxing" % "javase" % "3.1.0",
+  "com.stackmob" %% "newman" % "1.3.5",
+  "org.jsoup" % "jsoup" % "1.7.2"
 )
