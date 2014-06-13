@@ -11,7 +11,10 @@ import javafx.event.EventHandler
 import javafx.scene.{Scene, Group}
 import javafx.scene.image.Image
 import javafx.scene.image.ImageView
-import javafx.scene.layout.HBox
+import javafx.scene.layout.{HBox, VBox}
+import javafx.scene.control.{TableView, TableColumn, Label}
+import javafx.scene.control.cell.PropertyValueFactory
+import javafx.beans.property.{SimpleStringProperty, SimpleIntegerProperty}
 import javafx.stage.Stage
 import javafx.concurrent.{Service, Task}
 import scala.concurrent._
@@ -31,7 +34,7 @@ import com.stackmob.newman._
 import com.stackmob.newman.dsl._
 import java.net.{URL, URLEncoder}
 import org.jsoup.Jsoup
-import java.nio.charset.charset
+import java.nio.charset.Charset
 
 object AladinChecker {
   def main(args: Array[String]): Unit = {
@@ -62,12 +65,67 @@ class AladinChecker extends javafx.application.Application {
   def mkTask[X](callFn: => X): Task[X] = new Task[X] { override def call(): X = callFn }
   def mkEventHandler[E <: Event](f: E => Unit) = new EventHandler[E] { def handle(e: E) = f(e) }
 
+  class UsedBook(title:String, author:String, publisher:String, high:Int, middle:Int, low:Int) {
+    val t = new SimpleStringProperty(title)
+    def titleProperty = t
+    def getTitle:String = t.get
+    def setTitle(v:String) = t.set(v)
+
+    val a = new SimpleStringProperty(author)
+    def authorProperty = a
+    def getAuthor:String = a.get
+    def setAuthor(v:String) = a.set(v)
+
+    val p = new SimpleStringProperty(publisher)
+    def publisherProperty = p
+    def getPublisher:String = p.get
+    def setPublisher(v:String) = p.set(v)
+
+    val h = new SimpleIntegerProperty(high)
+    def highProperty = h
+    def getHigh:Int = h.get
+    def setHigh(v:Int) = h.set(v)
+
+    val m = new SimpleIntegerProperty(middle)
+    def middleProperty = m
+    def getMiddle = m.get
+    def setMiddle(v:Int) = m.set(v)
+
+    val l = new SimpleIntegerProperty(low)
+    def lowProperty = l
+    def getLow = l.get
+    def setLow(v:Int) = l.set(v)
+  }
+
+  val bookData = javafx.collections.FXCollections.observableArrayList[UsedBook]()
+
+  def resultTable():TableView[UsedBook] = {
+    val t = new TableView[UsedBook]
+    t.setItems(bookData)
+    val col1 = new TableColumn[UsedBook, String]("제 목")
+    col1.setMinWidth(200)
+    col1.setCellValueFactory(new PropertyValueFactory[UsedBook, String]("title"))
+    val col2 = new TableColumn[UsedBook, String]("저 자")
+    col2.setCellValueFactory(new PropertyValueFactory[UsedBook, String]("author"))
+    val col3 = new TableColumn[UsedBook, String]("출판사")
+    col3.setCellValueFactory(new PropertyValueFactory[UsedBook, String]("publisher"))
+    val col4 = new TableColumn[UsedBook, Int]("최 상")
+    col4.setCellValueFactory(new PropertyValueFactory[UsedBook, Int]("high"))
+    val col5 = new TableColumn[UsedBook, Int]("상")
+    col5.setCellValueFactory(new PropertyValueFactory[UsedBook, Int]("middle"))
+    val col6 = new TableColumn[UsedBook, Int]("중")
+    col6.setCellValueFactory(new PropertyValueFactory[UsedBook, Int]("low"))
+    t.getColumns.addAll(col1, col2, col3, col4, col5, col6)
+    t
+  }
+
   override def start(stage: Stage):Unit = {
     stage.setTitle("알라딘 중고 서적 검사")
     val videoView = new ImageView()
-    val root = new Group()
-    root.getChildren.add(videoView)
-    val scene = new Scene(root, 500, 500)
+    val root = new HBox()
+    val result = resultTable
+    root.getChildren.addAll(videoView, result)
+    val scene = new Scene(root, 1024, 500)
     stage.setScene(scene)
     cam.setOnSucceeded(
       mkEventHandler(event => {
@@ -84,12 +142,16 @@ class AladinChecker extends javafx.application.Application {
           val bitmap = new BinaryBitmap(new HybridBinarizer(lsource))
           try {
             val result = reader.decode(bitmap, decodeHints)
+            // decodeHints 빼면 QR 포함 다른 코드들도 인식
             println(result)
             } catch {
               case e:com.google.zxing.NotFoundException =>
                 // no barcodes in image, just ignore
             }
-
+          if (bookData.isEmpty) {
+            println("adding...")
+            bookData.add(new UsedBook("실마리의 마음", "허서구", "문학동네", 10000, 7000, 5000))
+          }
           Platform.runLater(
             new Runnable() {
               def run = cam.restart
