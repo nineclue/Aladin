@@ -19,6 +19,7 @@ import javafx.stage.Stage
 import javafx.concurrent.{Service, Task}
 import scala.concurrent._
 import ExecutionContext.Implicits.global
+import javafx.collections.ListChangeListener
 
 // Barcode related imports
 import com.google.zxing.{MultiFormatReader, RGBLuminanceSource, BinaryBitmap}
@@ -63,13 +64,13 @@ class AladinChecker extends javafx.application.Application {
   }
 
   class Query extends Service[Future[Document]] {
-    def createTask = 
-      if (!isbn.isEmpty) 
+    def createTask =
+      if (!isbn.isEmpty)
         mkTask({
           AladinQuery.query(isbn.get).map(resp =>
               Jsoup.parse(resp.bodyString(Charset.forName("euc-kr"))))
-        }) 
-      else 
+        })
+      else
         mkTask(Future.successful(new Document("")))
   }
 
@@ -145,16 +146,44 @@ class AladinChecker extends javafx.application.Application {
     stage.setTitle("알라딘 중고 서적 검사")
     val videoView = new ImageView()
     val root = new HBox()
+    val rbox = new VBox()
     val result = resultTable
-    root.getChildren.addAll(videoView, result)
+    val bbox = new HBox(20)
+    val l1 = new Label("최 대")
+    val vMax = new Label("0")
+    val l2 = new Label("최 소")
+    val vMin = new Label("0")
+    val labelStyle = "-fx-font-size:24; -fx-font-weight:bold"
+    bbox.getChildren.addAll(l1, vMax, l2, vMin)
+    List(l1, vMax, l2, vMin).foreach(_.setStyle(labelStyle))
+    rbox.getChildren.addAll(result, bbox)
+    root.getChildren.addAll(videoView, rbox)
+    bookData.addListener(new ListChangeListener[UsedBook]() {
+        def onChanged(b:ListChangeListener.Change[_ <: UsedBook]) {
+          println("book changed!")
+          val (max, min) = bookData.foldLeft((0, 0))((t, b) => (t._1 + b.getHigh, t._2 + b.getLow))
+          if (debug) println(max, min)
+          Platform.runLater(
+            new Runnable() {
+              def run = {
+                vMax.setText(max.toString)
+                vMin.setText(min.toString)
+              }
+            }
+          )
+        }
+      })
+
     val scene = new Scene(root, 1300, 700)
     stage.setScene(scene)
     cam.setOnSucceeded(
       mkEventHandler(event => {
         for {
           omat <- event.getSource.getValue.asInstanceOf[Future[Mat]]
-          mat = new Mat(omat, cropRoi)
         } {
+          val mat = if (omat.width < cropRoi.width || omat.height < cropRoi.height)
+                  omat
+                else new Mat(omat, cropRoi)
           val gmat = new Mat
           Imgproc.cvtColor(mat, gmat, Imgproc.COLOR_BGR2GRAY)
           val png = new MatOfByte()
@@ -169,12 +198,13 @@ class AladinChecker extends javafx.application.Application {
             // val result = reader.decode(bitmap)
             val result = reader.decode(bitmap, decodeHints)
             // decodeHints 빼면 QR 포함 다른 코드들도 인식
-            println(result.getText)
+            if (debug) println(result.getText)
             val code = result.getText
             if (!isbns.contains(code)) {
               isbns += code
               Some(code)
             } else {
+              if (debug) println(s"이미 검사한 isbn(${code})입니다.")
               None
             }
           } catch {
@@ -182,14 +212,16 @@ class AladinChecker extends javafx.application.Application {
               // no barcodes in image, just ignore
               None
           }
-          if (bookData.isEmpty) {
+          /* if (debug && bookData.isEmpty) {
             println("adding...")
             bookData.add(new UsedBook("실마리의 마음", "허서구", "문학동네", 10000, 7000, 5000))
-          }
+          } */
           Platform.runLater(
             new Runnable() {
-              def run = cam.restart
-              if (!isbn.isEmpty) query.restart
+              def run = {
+                cam.restart
+                if (!isbn.isEmpty) query.restart
+              }
             }
           )
         }})
@@ -203,7 +235,11 @@ class AladinChecker extends javafx.application.Application {
           // val doc = Jsoup.parse(resp.bodyString(Charset.forName("euc-kr")))
           val bookinfo = doc.select(AladinQuery.info)
           val pay = doc.select(AladinQuery.pay)
-          // bookData.add(new UsedBook(bookinfo[0], bookinfo[1], bookinfo[2], pay[0], pay[1], pay[2]))
+          if (bookinfo.size != 0) {
+            bookData.add(
+              new UsedBook(bookinfo.get(0).text, bookinfo.get(1).text, bookinfo.get(2).text,
+               digits(pay.get(1).text), digits(pay.get(2).text), digits(pay.get(3).text)))
+          }
         }
       })
     )
@@ -217,6 +253,8 @@ class AladinChecker extends javafx.application.Application {
   val decodeHints = collection.mutable.Map(DecodeHintType.POSSIBLE_FORMATS -> collection.mutable.Seq(BarcodeFormat.EAN_13).asJava).asJava
 
   val isbns = collection.mutable.Set.empty[String]
+  def digits(s:String) = s.filter(_.isDigit).toInt
+  val debug = true
 }
 
 object AladinQuery {
